@@ -61,10 +61,10 @@ jobs:
               echo "=== Downloading kernel sources ==="
               KERNEL_TAR="linux-${KERNEL_VERSION}.tar.xz"
               KERNEL_URL="https://github.com/ich777/unraid_kernel/releases/download/${KERNEL_VERSION}/${KERNEL_TAR}"
-              wget -q --show-progress -O "/usr/src/${KERNEL_TAR}" "${KERNEL_URL}"
-              cd /usr/src
-              tar xf "${KERNEL_TAR}"
-              cd "linux-${KERNEL_VERSION}"
+              wget -q --show-progress -O "/tmp/${KERNEL_TAR}" "${KERNEL_URL}"
+              mkdir -p "/usr/src/linux-${KERNEL_VERSION}"
+              tar xf "/tmp/${KERNEL_TAR}" -C "/usr/src/linux-${KERNEL_VERSION}"
+              cd "/usr/src/linux-${KERNEL_VERSION}"
 
               echo "=== Preparing kernel headers ==="
               make oldconfig </dev/null
