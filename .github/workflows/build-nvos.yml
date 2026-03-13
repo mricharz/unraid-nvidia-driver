@@ -79,13 +79,7 @@ jobs:
               # Step 2: Create makepkg shim (bzroot not extracted in CI)
               # ---------------------------------------------------------------
               mkdir -p "${DATA_DIR}/bzroot-extracted-${UNAME}/sbin"
-              cat > "${DATA_DIR}/bzroot-extracted-${UNAME}/sbin/makepkg" << "MKPKG"
-#!/bin/bash
-# Minimal makepkg shim — creates a Slackware-compatible .txz package
-while [[ "$1" == -* ]]; do shift; done
-PKGFILE="$1"
-tar cJf "${PKGFILE}" .
-MKPKG
+              printf "#!/bin/bash\nwhile [[ \"\$1\" == -* ]]; do shift; done\ntar cJf \"\$1\" .\n" > "${DATA_DIR}/bzroot-extracted-${UNAME}/sbin/makepkg"
               chmod +x "${DATA_DIR}/bzroot-extracted-${UNAME}/sbin/makepkg"
 
               # ---------------------------------------------------------------
