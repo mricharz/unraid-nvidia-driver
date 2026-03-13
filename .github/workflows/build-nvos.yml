@@ -37,10 +37,11 @@ jobs:
         run: |
           docker pull ghcr.io/ich777/unraid_kernel:${{ inputs.gcc_tag }}
           docker run --rm \
+            --entrypoint bash \
             -v "$GITHUB_WORKSPACE":/workspace \
             -v "$GITHUB_WORKSPACE/output":/output \
             ghcr.io/ich777/unraid_kernel:${{ inputs.gcc_tag }} \
-            bash -c '
+            -c '
               set -euo pipefail
 
               DRIVER_VERSION="${{ inputs.driver_version }}"
