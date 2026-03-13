@@ -193,6 +193,49 @@ elif [ "${SET_DRV_V}" == "latest_nfb" ]; then
       LAT_PACKAGE="$(echo "$DRIVER_AVAIL" | grep "$LAT_NFB_V")"
     fi
   fi
+elif [ "${SET_DRV_V}" == "latest_beta" ]; then
+  LAT_BETA_AVAIL="$(echo "$BRANCHES" | jq -r '.beta.current')"
+  if [ -z "$LAT_BETA_AVAIL" ]; then
+    if [ -z "${CUR_V}" ]; then
+      echo
+      echo "-----ERROR - ERROR - ERROR - ERROR - ERROR - ERROR - ERROR - ERROR - ERROR------"
+      echo "------Can't get Beta Branch version and found no installed local driver---------"
+      echo "-----Please wait for an hour and try it again, if it then also fails please-----"
+      echo "------go to the Support Thread on the Unraid forums and make a post there!------"
+      exit 1
+    else
+      LAT_PACKAGE=$PACKAGE-$CUR_V-$KERNEL_V-1.txz
+    fi
+  elif [ -z "$DRIVER_AVAIL" ]; then
+    if [ -z "${CUR_V}" ]; then
+      echo
+      echo "-----ERROR - ERROR - ERROR - ERROR - ERROR - ERROR - ERROR - ERROR - ERROR------"
+      echo "------Can't get Nvidia driver versions and found no installed local driver------"
+      echo "-----Please wait for an hour and try it again, if it then also fails please-----"
+      echo "------go to the Support Thread on the Unraid forums and make a post there!------"
+      exit 1
+    else
+      LAT_PACKAGE=$PACKAGE-$CUR_V-$KERNEL_V-1.txz
+    fi
+  else
+    LAT_BETA_V="$(comm -12 <(echo "$DRIVER_AVAIL" | cut -d '-' -f2 | awk -F '.' '{printf "%d.%03d.%d\n", $1,$2,$3}' | awk -F '.' '{printf "%d.%03d.%02d\n", $1,$2,$3}') <(echo "$LAT_BETA_AVAIL" | awk -F '.' '{printf "%d.%03d.%d\n", $1,$2,$3}' | awk -F '.' '{printf "%d.%03d.%02d\n", $1,$2,$3}') | sort -V | tail -1 | awk -F '.' '{printf "%d.%02d.%02d\n", $1,$2,$3}' | awk '{sub(/\.0+$/,"")}1')"
+    if [ -z "${LAT_BETA_V}" ]; then
+      if [ -z "${CUR_V}" ]; then
+        echo
+        echo "-----ERROR - ERROR - ERROR - ERROR - ERROR - ERROR - ERROR - ERROR - ERROR------"
+        echo "------Can't get Nvidia driver versions and found no installed local driver------"
+        echo "-----Please wait for an hour and try it again, if it then also fails please-----"
+        echo "------go to the Support Thread on the Unraid forums and make a post there!------"
+        exit 1
+      else
+        LAT_PACKAGE="$(echo "$DRIVER_AVAIL" | tail -1)"
+        echo "---Can't find latest Beta Branch Nvidia Driver for your Kernel v${KERNEL_V%%-*} falling back to latest Nvidia Driver v$(echo $LAT_PACKAGE | cut -d '-' -f2)---"
+        sed -i '/driver_version=/c\driver_version=latest' "/boot/config/plugins/nvidia-driver/settings.cfg"
+      fi
+    else
+      LAT_PACKAGE="$(echo "$DRIVER_AVAIL" | grep "$LAT_BETA_V")"
+    fi
+  fi
 elif [ "${SET_DRV_V}" == "latest_nos" ]; then
   if [ -z "$LAT_NOS_AVAIL" ]; then
     if [ -z "${CUR_V}" ]; then

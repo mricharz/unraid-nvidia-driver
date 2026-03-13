@@ -48,7 +48,7 @@ fi
 
 function update_version(){
 sed -i "/driver_version=/c\driver_version=${1}" "/boot/config/plugins/nvidia-driver/settings.cfg"
-if [[ "${1}" != "latest" && "${1}" != "latest_prb" && "${1}" != "latest_nfb" ]]; then
+if [[ "${1}" != "latest" && "${1}" != "latest_prb" && "${1}" != "latest_nfb" && "${1}" != "latest_beta" ]]; then
   sed -i "/update_check=/c\update_check=false" "/boot/config/plugins/nvidia-driver/settings.cfg"
   echo -n "$(crontab -l | grep -v '/usr/local/emhttp/plugins/nvidia-driver/include/update-check.sh &>/dev/null 2>&1'  | crontab -)"
 fi
@@ -68,8 +68,20 @@ function get_nfb(){
 echo -n "$(comm -12 <(cat /tmp/nvidia_driver | awk -F '.' '{printf "%d.%03d.%d\n", $1,$2,$3}' | awk -F '.' '{printf "%d.%03d.%02d\n", $1,$2,$3}') <(echo "$(cat /tmp/nvidia_branches | jq -r '.branches.newfeature[]' | sort -V | awk -F '.' '{printf "%d.%03d.%d\n", $1,$2,$3}' | awk -F '.' '{printf "%d.%03d.%02d\n", $1,$2,$3}')") | tail -1 | awk -F '.' '{printf "%d.%02d.%02d\n", $1,$2,$3}' | awk '{sub(/\.0+$/,"")}1')"
 }
 
+function get_beta(){
+echo -n "$(comm -12 <(cat /tmp/nvidia_driver | awk -F '.' '{printf "%d.%03d.%d\n", $1,$2,$3}' | awk -F '.' '{printf "%d.%03d.%02d\n", $1,$2,$3}') <(echo "$(cat /tmp/nvidia_branches | jq -r '.branches.beta.current' | sort -V | awk -F '.' '{printf "%d.%03d.%d\n", $1,$2,$3}' | awk -F '.' '{printf "%d.%03d.%02d\n", $1,$2,$3}')") | tail -1 | awk -F '.' '{printf "%d.%02d.%02d\n", $1,$2,$3}' | awk '{sub(/\.0+$/,"")}1')"
+}
+
 function get_nos(){
 echo -n "$(cat /tmp/nvos_driver | sort -V | tail -1)"
+}
+
+function get_gpu_arch(){
+echo -n "$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1)"
+}
+
+function get_cuda_version(){
+echo -n "$(nvidia-smi 2>/dev/null | grep 'CUDA Version' | grep -oE '[0-9]+\.[0-9]+' | tail -1)"
 }
 
 function get_selected_version(){

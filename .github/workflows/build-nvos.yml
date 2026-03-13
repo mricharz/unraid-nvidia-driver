@@ -1,0 +1,145 @@
+name: Build NVOS Driver Package
+
+on:
+  workflow_dispatch:
+    inputs:
+      driver_version:
+        description: 'NVIDIA driver version (e.g. 595.45.04)'
+        required: true
+        default: '595.45.04'
+      kernel_version:
+        description: 'Unraid kernel version (e.g. 6.12.54-Unraid)'
+        required: true
+        default: '6.12.54-Unraid'
+      gcc_tag:
+        description: 'GCC container tag from ghcr.io/ich777/unraid_kernel'
+        required: true
+        default: 'gcc_14.2.0'
+
+jobs:
+  build-nvos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          df -h /
+
+      - name: Create output directory
+        run: mkdir -p output
+
+      - name: Build NVOS package in container
+        run: |
+          docker pull ghcr.io/ich777/unraid_kernel:${{ inputs.gcc_tag }}
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE":/workspace \
+            -v "$GITHUB_WORKSPACE/output":/output \
+            ghcr.io/ich777/unraid_kernel:${{ inputs.gcc_tag }} \
+            bash -c '
+              set -euo pipefail
+
+              DRIVER_VERSION="${{ inputs.driver_version }}"
+              KERNEL_VERSION="${{ inputs.kernel_version }}"
+
+              echo "=== Building nvos-${DRIVER_VERSION} for kernel ${KERNEL_VERSION} ==="
+
+              # Set required environment variables (normally set by container entrypoint)
+              export UNAME="${KERNEL_VERSION}"
+              export CPU_COUNT="$(nproc)"
+              export DATA_DIR="/tmp/nvidia-build"
+              mkdir -p "${DATA_DIR}"
+
+              # ---------------------------------------------------------------
+              # Step 1: Prepare kernel sources
+              # ---------------------------------------------------------------
+              echo "=== Downloading kernel sources ==="
+              KERNEL_TAR="linux-${KERNEL_VERSION}.tar.xz"
+              KERNEL_URL="https://github.com/ich777/unraid_kernel/releases/download/${KERNEL_VERSION}/${KERNEL_TAR}"
+              wget -q --show-progress -O "/usr/src/${KERNEL_TAR}" "${KERNEL_URL}"
+              cd /usr/src
+              tar xf "${KERNEL_TAR}"
+              cd "linux-${KERNEL_VERSION}"
+
+              echo "=== Preparing kernel headers ==="
+              make oldconfig </dev/null
+              make modules_prepare -j${CPU_COUNT}
+
+              # Create symlink so nvidia-installer can find kernel sources
+              mkdir -p "/lib/modules/${UNAME}"
+              ln -sf "/usr/src/linux-${KERNEL_VERSION}" "/lib/modules/${UNAME}/build"
+              ln -sf "/usr/src/linux-${KERNEL_VERSION}" "/lib/modules/${UNAME}/source"
+              cd /
+
+              # ---------------------------------------------------------------
+              # Step 2: Create makepkg shim (bzroot not extracted in CI)
+              # ---------------------------------------------------------------
+              mkdir -p "${DATA_DIR}/bzroot-extracted-${UNAME}/sbin"
+              cat > "${DATA_DIR}/bzroot-extracted-${UNAME}/sbin/makepkg" << "MKPKG"
+#!/bin/bash
+# Minimal makepkg shim — creates a Slackware-compatible .txz package
+while [[ "$1" == -* ]]; do shift; done
+PKGFILE="$1"
+tar cJf "${PKGFILE}" .
+MKPKG
+              chmod +x "${DATA_DIR}/bzroot-extracted-${UNAME}/sbin/makepkg"
+
+              # ---------------------------------------------------------------
+              # Step 3: Build using compile.sh
+              # ---------------------------------------------------------------
+              echo "=== Loading compile.sh and building ==="
+              cd /workspace
+
+              # Source compile.sh to load the nvidia_driver() function.
+              # compile.sh lines 6-9 check $1 is not empty (exit 1 if missing).
+              # Lines 11-17 fetch versions.json and extract runtime versions.
+              # Lines 19-167 define nvidia_driver() but never call it.
+              source source/compile.sh "${DRIVER_VERSION}" "opensource"
+
+              # Call the build function
+              nvidia_driver "${DRIVER_VERSION}" "opensource"
+
+              # ---------------------------------------------------------------
+              # Step 4: Copy output artifacts
+              # ---------------------------------------------------------------
+              echo "=== Copying build artifacts ==="
+              find /tmp -name "nvos-*.txz" -exec cp {} /output/ \;
+              find /tmp -name "nvos-*.txz.md5" -exec cp {} /output/ \;
+
+              echo "=== Build artifacts ==="
+              ls -la /output/
+            '
+
+      - name: Verify build output
+        run: |
+          echo "=== Checking output ==="
+          ls -la output/
+          if [ -z "$(ls output/nvos-*.txz 2>/dev/null)" ]; then
+            echo "ERROR: No .txz package found in output!"
+            exit 1
+          fi
+          echo "=== MD5 verification ==="
+          cd output
+          for f in *.txz; do
+            if [ -f "${f}.md5" ]; then
+              EXPECTED="$(cat "${f}.md5")"
+              ACTUAL="$(md5sum "${f}" | awk '{print $1}')"
+              echo "${f}: expected=${EXPECTED} actual=${ACTUAL}"
+              if [ "${EXPECTED}" != "${ACTUAL}" ]; then
+                echo "CHECKSUM MISMATCH!"
+                exit 1
+              fi
+              echo "Checksum OK"
+            fi
+          done
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nvos-${{ inputs.driver_version }}-${{ inputs.kernel_version }}
+          path: output/*
+          retention-days: 90

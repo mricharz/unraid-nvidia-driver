@@ -15,6 +15,7 @@ $latest_v = shell_exec('/usr/local/emhttp/plugins/nvidia-driver/include/exec.sh 
 //Get branch versions
 $latest_prb_v = shell_exec('/usr/local/emhttp/plugins/nvidia-driver/include/exec.sh get_prb');
 $latest_nfb_v = shell_exec('/usr/local/emhttp/plugins/nvidia-driver/include/exec.sh get_nfb');
+$latest_beta_v = shell_exec('/usr/local/emhttp/plugins/nvidia-driver/include/exec.sh get_beta');
 $latest_nos_v = shell_exec('/usr/local/emhttp/plugins/nvidia-driver/include/exec.sh get_nos');
 
 //Get driver license
@@ -22,6 +23,34 @@ $module_license = shell_exec('/usr/local/emhttp/plugins/nvidia-driver/include/ex
 
 //Get current installed driver version
 $installed_v = shell_exec('/usr/local/emhttp/plugins/nvidia-driver/include/exec.sh get_installed_version');
+
+//Get GPU architecture (compute capability)
+$gpu_arch = trim(shell_exec('/usr/local/emhttp/plugins/nvidia-driver/include/exec.sh get_gpu_arch'));
+
+//Get CUDA version
+$cuda_v = trim(shell_exec('/usr/local/emhttp/plugins/nvidia-driver/include/exec.sh get_cuda_version'));
+
+//Determine if GPU is Blackwell or newer (compute capability >= 10.0)
+$is_blackwell = false;
+if (!empty($gpu_arch)) {
+  $arch_num = floatval($gpu_arch);
+  $is_blackwell = ($arch_num >= 10.0);
+}
+
+//Map compute capability to architecture name
+$arch_name = '';
+if (!empty($gpu_arch)) {
+  $arch_num = floatval($gpu_arch);
+  if ($arch_num >= 12.0) $arch_name = 'Blackwell';
+  elseif ($arch_num >= 10.0) $arch_name = 'Blackwell';
+  elseif ($arch_num >= 8.9) $arch_name = 'Ada Lovelace';
+  elseif ($arch_num >= 8.6) $arch_name = 'Ampere';
+  elseif ($arch_num >= 8.0) $arch_name = 'Ampere';
+  elseif ($arch_num >= 7.5) $arch_name = 'Turing';
+  elseif ($arch_num >= 7.0) $arch_name = 'Volta';
+  elseif ($arch_num >= 6.0) $arch_name = 'Pascal';
+  else $arch_name = 'Legacy';
+}
 
 //Read driver versions from '/tmp/nvidia_driver'
 error_reporting(E_ALL);
@@ -32,6 +61,15 @@ $update_check = shell_exec("/usr/local/emhttp/plugins/nvidia-driver/include/exec
 
 $filename = "/tmp/nvidia_driver";
 $eachlines = file($filename, FILE_IGNORE_NEW_LINES);
+
+//Read open source driver versions
+$nvos_versions = array();
+if (file_exists("/tmp/nvos_driver")) {
+  $nvos_lines = file("/tmp/nvos_driver", FILE_IGNORE_NEW_LINES);
+  if ($nvos_lines !== false) {
+    $nvos_versions = $nvos_lines;
+  }
+}
 
 //Get installed driver version
 $cur_drv_v = shell_exec("nvidia-smi | grep \"Driver Version\" | cut -d ' ' -f3");
@@ -55,15 +93,98 @@ $unraid_version = parse_ini_file('/etc/unraid-version');
 
 <script>
 function changeVersion(form) {
-    var package = form.drv_version.value;
-    openBox("/usr/local/emhttp/plugins/nvidia-driver/include/exec.sh&arg1=update_version&arg2="+package,"Downloading Package",600,800,true);
+    var pkg = form.drv_version.value;
+    openBox("/usr/local/emhttp/plugins/nvidia-driver/include/exec.sh&arg1=update_version&arg2="+pkg,"Downloading Package",600,800,true);
     return false;
+}
+
+function filterVersions() {
+    var moduleType = document.getElementById('module_type').value;
+    var versionSelect = document.getElementById('drv_version');
+    var options = versionSelect.querySelectorAll('option');
+    var blackwellWarning = document.getElementById('blackwell-warning');
+    var isBlackwell = <?php echo $is_blackwell ? 'true' : 'false'; ?>;
+
+    options.forEach(function(opt) {
+        var val = opt.value;
+        if (moduleType === 'opensource') {
+            // Show open source options, hide proprietary-only
+            if (val === 'latest_nos') {
+                opt.style.display = '';
+            } else if (val === 'latest' || val === 'latest_prb' || val === 'latest_nfb' || val === 'latest_beta') {
+                opt.style.display = 'none';
+            } else {
+                // Specific versions: hide versions below 560 (no open source support)
+                var ver = parseFloat(val);
+                if (!isNaN(ver) && ver < 560) {
+                    opt.style.display = 'none';
+                } else {
+                    opt.style.display = '';
+                }
+            }
+        } else {
+            // Show proprietary options, hide open-source-only
+            if (val === 'latest_nos') {
+                opt.style.display = 'none';
+            } else {
+                opt.style.display = '';
+            }
+        }
+    });
+
+    // Show/hide optgroups based on content visibility
+    var optgroups = versionSelect.querySelectorAll('optgroup');
+    optgroups.forEach(function(og) {
+        var visibleOpts = og.querySelectorAll('option:not([style*="display: none"])');
+        og.style.display = visibleOpts.length > 0 ? '' : 'none';
+    });
+
+    // Reset selection if current selection is hidden
+    var selectedOpt = versionSelect.options[versionSelect.selectedIndex];
+    if (selectedOpt && selectedOpt.style.display === 'none') {
+        // Select the first visible option
+        for (var i = 0; i < versionSelect.options.length; i++) {
+            if (versionSelect.options[i].style.display !== 'none') {
+                versionSelect.selectedIndex = i;
+                break;
+            }
+        }
     }
+
+    // Show Blackwell warning when proprietary is selected on Blackwell GPU
+    if (blackwellWarning) {
+        blackwellWarning.style.display = (moduleType === 'proprietary' && isBlackwell) ? 'block' : 'none';
+    }
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    filterVersions();
+});
 </script>
 
 <style>
 table tbody td {
     line-height:normal
+}
+select {
+    padding: 4px 8px;
+    margin: 4px 0;
+}
+.info-box {
+    background: #f0f0f0;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 10px;
+    margin: 10px 0;
+}
+.warning-box {
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 4px;
+    padding: 10px;
+    margin: 10px 0;
+    color: #856404;
 }
 </style>
 
@@ -74,20 +195,33 @@ table tbody td {
 
 <div style="width: 47%; min-width: 700px; max-width: 1260px; flex-wrap: wrap; margin: 10px;">
 <p><b><font size="+1">Nvidia Info:</font></b></p>
-            <p>Nvidia Driver Version: 
+            <p>Nvidia Driver Version:
             <b style="color:green"><?php echo $cur_drv_v; ?></b></p>
         <? if (isset($module_license ) === true && trim($module_license ) === 'OPENSOURCE'): ?>
-            <p>Open Source Kernel Module: 
-            <b style="color:blue">Yes</b></p>
+            <p>Kernel Module:
+            <b style="color:blue">Open Source</b></p>
         <? elseif (isset($module_license ) === true && trim($module_license ) === 'PROPRIETARY'): ?>
-            <p>Open Source Kernel Module: 
-            <b style="color:green">No</b></p>
+            <p>Kernel Module:
+            <b style="color:green">Proprietary</b></p>
+        <? endif; ?>
+        <? if (!empty($cuda_v)): ?>
+            <p>CUDA Version:
+            <b style="color:green"><?php echo $cuda_v; ?></b></p>
+        <? endif; ?>
+        <? if (!empty($gpu_arch)): ?>
+            <p>GPU Architecture:
+            <b style="color:green"><?php echo $gpu_arch; ?> (<?php echo $arch_name; ?>)</b></p>
+        <? endif; ?>
+        <? if ($is_blackwell): ?>
+            <div class="warning-box">
+                <b>Blackwell GPU detected (sm_<?php echo str_replace('.', '', $gpu_arch); ?>):</b> This GPU architecture requires Open Source kernel modules. Proprietary modules will not load on Blackwell GPUs.
+            </div>
         <? endif; ?>
             <p>Installed GPU(s):<br/>
             <b style="color:green"><?=`nvidia-smi --query-gpu=index,name,gpu_bus_id,uuid --format=csv,noheader | tr "," "\n" | sed 's/^[ \t]*//' | sed -e s/00000000://g | sed '0~4G' | sed 's/^[0-9]$/&:/' | sed 's/$/<br>/'`?></b></p><br/>
         </tr>
     </table>
-    <? if (isset($selected_v ) === true && trim($selected_v ) === 'latest' || trim($selected_v ) === 'latest_prb' || trim($selected_v ) === 'latest_nfb'): ?>
+    <? if (isset($selected_v ) === true && (trim($selected_v ) === 'latest' || trim($selected_v ) === 'latest_prb' || trim($selected_v ) === 'latest_nfb' || trim($selected_v ) === 'latest_beta')): ?>
 		<tr><td>
 		<b><font size="+1">Driver Update Notification</font></b>
 		</td></tr>
@@ -113,69 +247,81 @@ table tbody td {
     <table>
             <form id="s" method="post" >
               <tr>
-                <td><b>Latest Versions:</b></td>
+                <td><b>Module Type:</b></td>
                 <td>
-                    <p><input type="radio" name="drv_version" value="latest" <?php echo ( $selected_v == "latest") ? 'checked="checked"' : ''; ?><font><b>latest</font>:</b> <?php echo "v$latest_v"; ?> </p>
-                    <? if (isset($latest_prb_v ) === true && trim($latest_prb_v ) !== ''): ?>
-                    <p><input type="radio" name="drv_version" value="latest_prb" <?php echo ( $selected_v == "latest_prb") ? 'checked="checked"' : ''; ?><b><font color = "green"><b>Production Branch</font>:</b>  <?php echo "v$latest_prb_v"; ?> </p>
-                    <? else: ?>
-                    <p><b><font color = "green">Production Branch</font>:</b> <i>Not found for this Unraid version!</i></p>
-                    <? endif; ?>
-                    <? if (isset($latest_nfb_v ) === true && trim($latest_nfb_v ) !== ''): ?>
-                    <p><input type="radio" name="drv_version" value="latest_nfb" <?php echo ( $selected_v == "latest_nfb") ? 'checked="checked"' : ''; ?><b><font color = "tomato"><b>New Feature Branch</font>:</b> <?php echo "v$latest_nfb_v"; ?></p>
-                    <? else: ?>
-                    <p><b><font color = "tomato">New Feature Branch</font>:</b> <i>Not found for this Unraid version!</i></p>
-                    <? endif; ?>
-                    <? if (isset($latest_nos_v ) === true && trim($latest_nos_v ) !== ''): ?>
-                    <p><input type="radio" name="drv_version" value="latest_nos" <?php echo ( $selected_v == "latest_nos") ? 'checked="checked"' : ''; ?><b><font color = "blue"><b>Open Source Driver</font>:</b> <?php echo "v$latest_nos_v"; ?><? echo (version_compare($unraid_version['version'], '7.0.0-rc.1.1', '<')) ? '<em><b> - Please see readme below!</b></em>' : ''; ?></p>
-                    <? else: ?>
-                    <p><b><font color = "blue">Open Source Driver</font>:</b> <i>Not found for this Unraid version!</i></p>
-                    <? endif; ?>
+                    <select id="module_type" onchange="filterVersions()" style="width: 100%; max-width: 400px;">
+                        <option value="opensource" <?php echo ($is_blackwell || trim($module_license) === 'OPENSOURCE' || trim($selected_v) === 'latest_nos') ? 'selected' : ''; ?>>Open Source Kernel Module</option>
+                        <option value="proprietary" <?php echo (!$is_blackwell && trim($module_license) !== 'OPENSOURCE' && trim($selected_v) !== 'latest_nos') ? 'selected' : ''; ?>>Proprietary Kernel Module</option>
+                    </select>
+                    <div id="blackwell-warning" class="warning-box" style="display:none;">
+                        Your GPU requires Open Source kernel modules. Proprietary modules will not load on Blackwell GPUs.
+                    </div>
                 </td>
               </tr>
               <tr>
-                <td><b>Available Versions:</b></td><td>
-                    <?php
-                    krsort($eachlines);
-                    foreach($eachlines as $lines){
-                    $arr = explode(" ", $lines);
-                    $lines2 = implode(" ", $arr);
-					          ?>
-                    <p>
-						<input type="radio" name="drv_version" value="<?php echo $lines2;?>" <?php echo ( $selected_v == $lines2) ? 'checked="checked"' : '' ?>/> 
-						v<?php echo $lines2;?>
-					          </p>
-                    <?php
-					          }
-                    ?>
+                <td><b>Version:</b></td>
+                <td>
+                    <select name="drv_version" id="drv_version" style="width: 100%; max-width: 400px;">
+                        <optgroup label="Follow Branch (auto-update)">
+                            <option value="latest" <?php echo (trim($selected_v) == "latest") ? 'selected' : ''; ?>>Latest &mdash; v<?php echo $latest_v; ?></option>
+                            <? if (isset($latest_prb_v) === true && trim($latest_prb_v) !== ''): ?>
+                            <option value="latest_prb" <?php echo (trim($selected_v) == "latest_prb") ? 'selected' : ''; ?>>Production Branch &mdash; v<?php echo $latest_prb_v; ?></option>
+                            <? endif; ?>
+                            <? if (isset($latest_nfb_v) === true && trim($latest_nfb_v) !== ''): ?>
+                            <option value="latest_nfb" <?php echo (trim($selected_v) == "latest_nfb") ? 'selected' : ''; ?>>New Feature Branch &mdash; v<?php echo $latest_nfb_v; ?></option>
+                            <? endif; ?>
+                            <? if (isset($latest_beta_v) === true && trim($latest_beta_v) !== ''): ?>
+                            <option value="latest_beta" <?php echo (trim($selected_v) == "latest_beta") ? 'selected' : ''; ?>>Beta Branch &mdash; v<?php echo $latest_beta_v; ?></option>
+                            <? endif; ?>
+                            <? if (isset($latest_nos_v) === true && trim($latest_nos_v) !== ''): ?>
+                            <option value="latest_nos" <?php echo (trim($selected_v) == "latest_nos") ? 'selected' : ''; ?>>Open Source Driver &mdash; v<?php echo $latest_nos_v; ?></option>
+                            <? endif; ?>
+                        </optgroup>
+                        <optgroup label="Pin Specific Version">
+                            <?php
+                            krsort($eachlines);
+                            foreach($eachlines as $lines){
+                              $ver = trim($lines);
+                              if (!empty($ver)) {
+                            ?>
+                            <option value="<?php echo $ver; ?>" <?php echo (trim($selected_v) == $ver) ? 'selected' : ''; ?>>v<?php echo $ver; ?></option>
+                            <?php
+                              }
+                            }
+                            ?>
+                        </optgroup>
+                    </select>
                 </td>
+              </tr>
               <tr>
+                <td></td>
                 <td>
+                    <input type="button" value="Update &amp; Download" onclick="changeVersion(this.form)" style="margin-top: 8px;">
                 </td>
-                <td>
-                    <input type="button" value="Update & Download" onclick="changeVersion(this.form)">
-                </td>
-            </tr>
+              </tr>
             </form>
-            </table>
+    </table>
 	<table>
-		<p style="text-align: left; font-weight: bold;">ATTENTION: If you set the version to 'latest', 'Production Branch' or 'New Feature Branch' you either have to enable the Driver Update Notification (this will download the driver automatically) or if you disabled the Driver Update Notification you manually have to click the button "Update & Download" to download a newer driver.<br>Please keep in mind, to install a newer driver you have to reboot your server.</p>
+		<p style="text-align: left; font-weight: bold;">ATTENTION: If you set the version to a branch (Latest, Production, New Feature, Beta) you either have to enable the Driver Update Notification (this will download the driver automatically) or if you disabled the Driver Update Notification you manually have to click the button "Update &amp; Download" to download a newer driver.<br>Please keep in mind, to install a newer driver you have to reboot your server.</p>
 		<br>
-		<p><b><font size+1> Latest versions:</font></b></p>
+		<div class="info-box">
+		<p><b>Branch descriptions:</b></p>
 		<ul>
-		  <p>
-		  <li><b>latest</b> - will always download the latest driver version available regardless of the branch</li><br>
-		  <li><b>Production Branch</b>  - This is the long lifecycle (i.e., multiple releases in a branch over a single year period) driver branch providing ISV Certification, optimal stability and performance, and regular security updates for NVIDIA RTX/Quadro professional customers. This driver was previously named, Optimal Driver for Enterprise (ODE), and is most commonly deployed in production systems at enterprises.</li><br>
-		  <li><b>New Feature Branch</b>  - This is a short lived branch driver (i.e., 1-2 releases per branch only) where new NVIDIA RTX/Quadro features are introduced and made available between Production Branch releases. New Feature Branch drivers, previously named, Quadro New Feature (QNF), typically provide support for new operating systems, third party hardware, and game engines.</li><br>
-		  <li><b>Open Source Driver</b>  - This package includes the Open Source Kernel modules and the libraries/execuatables from the proprietary Nvidia driver package.
-		  <br><b>Supported GPUs:</b> This driver package only supports Turing based cards and newer!
+		  <li><b>Latest</b> &mdash; Will always download the latest driver version available regardless of the branch.</li><br>
+		  <li><b>Production Branch</b> &mdash; Long lifecycle driver branch providing ISV Certification, optimal stability and performance, and regular security updates for NVIDIA RTX/Quadro professional customers. Previously named Optimal Driver for Enterprise (ODE). Most commonly deployed in production systems.</li><br>
+		  <li><b>New Feature Branch</b> &mdash; Short lived branch driver (1-2 releases per branch only) where new NVIDIA RTX/Quadro features are introduced between Production Branch releases. Previously named Quadro New Feature (QNF). Provides support for new operating systems, third party hardware, and game engines.</li><br>
+		  <li><b>Beta Branch</b> &mdash; Cutting-edge driver with the latest features. May contain issues. Not recommended for production use.</li><br>
+		  <li><b>Open Source Driver</b> &mdash; Includes Open Source Kernel modules and proprietary Nvidia libraries/executables.
+		  <br><b>Supported GPUs:</b> Turing based cards and newer only! <b>Required for Blackwell GPUs (RTX 50xx / RTX Pro 6000).</b>
 		  <?php
             if(version_compare($unraid_version['version'], '7.0.0-rc.1.1', '<')) {
               echo '<br><b><font color = "red">ATTENTION:</font></b> If you want to use the Open Source driver with GeForce and/or Workstation cards you have to create the file "<code>/boot/config/modprobe.d/nvidia.conf</code>" on your USB boot device with the contents, before you reboot your server:<br><code>options nvidia NVreg_OpenRmEnableUnsupportedGpus=1</code><br><p><em>For more information see <a href="https://us.download.nvidia.com/XFree86/Linux-x86_64/515.76/README/kernel_open.html">here</a>.</em></p>';
             }
 		  ?>
-		  </li></p></ul>
-		  <br/>
+		  </li>
+		</ul>
+		</div>
+		<br/>
 	</table>
 </div>
 
