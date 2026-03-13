@@ -1,25 +1,59 @@
-name: Build NVOS Driver Package
+name: Build NVIDIA Driver Packages
 
 on:
   workflow_dispatch:
-    inputs:
-      driver_version:
-        description: 'NVIDIA driver version (e.g. 595.45.04)'
-        required: true
-        default: '595.45.04'
-      kernel_version:
-        description: 'Unraid kernel version (e.g. 6.12.54-Unraid)'
-        required: true
-        default: '6.12.54-Unraid'
-      gcc_tag:
-        description: 'GCC container tag from ghcr.io/ich777/unraid_kernel'
-        required: true
-        default: 'gcc_14.2.0'
+  push:
+    paths:
+      - 'build-matrix.json'
 
 jobs:
-  build-nvos:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      gcc_tag: ${{ steps.set-matrix.outputs.gcc_tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: set-matrix
+        run: |
+          MATRIX=$(jq -c '
+            # Builds from branch definitions
+            [
+              .kernel_versions[] as $k |
+              .branches | to_entries[] |
+              .value.module_types[] as $m |
+              {
+                driver_version: .value.driver_version,
+                module_type: $m,
+                kernel_version: $k,
+                branch: .key
+              }
+            ]
+            +
+            # Extra builds for pin-to-specific-version (outside branch structure)
+            [
+              .kernel_versions[] as $k |
+              (.extra_builds // [])[] |
+              .module_types[] as $m |
+              {
+                driver_version: .driver_version,
+                module_type: $m,
+                kernel_version: $k,
+                branch: "extra"
+              }
+            ]
+          ' build-matrix.json)
+          echo "matrix=${MATRIX}" >> "$GITHUB_OUTPUT"
+          echo "gcc_tag=$(jq -r '.gcc_tag' build-matrix.json)" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: prepare
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.prepare.outputs.matrix) }}
 
     steps:
       - name: Checkout repository
@@ -33,23 +67,31 @@ jobs:
       - name: Create output directory
         run: mkdir -p output
 
-      - name: Build NVOS package in container
+      - name: Build package in container
         run: |
-          docker pull ghcr.io/ich777/unraid_kernel:${{ inputs.gcc_tag }}
+          docker pull ghcr.io/ich777/unraid_kernel:${{ needs.prepare.outputs.gcc_tag }}
           docker run --rm \
             --entrypoint bash \
             -v "$GITHUB_WORKSPACE":/workspace \
             -v "$GITHUB_WORKSPACE/output":/output \
-            ghcr.io/ich777/unraid_kernel:${{ inputs.gcc_tag }} \
+            ghcr.io/ich777/unraid_kernel:${{ needs.prepare.outputs.gcc_tag }} \
             -c '
               set -euo pipefail
 
-              DRIVER_VERSION="${{ inputs.driver_version }}"
-              KERNEL_VERSION="${{ inputs.kernel_version }}"
+              DRIVER_VERSION="${{ matrix.driver_version }}"
+              KERNEL_VERSION="${{ matrix.kernel_version }}"
+              MODULE_TYPE="${{ matrix.module_type }}"
 
-              echo "=== Building nvos-${DRIVER_VERSION} for kernel ${KERNEL_VERSION} ==="
+              if [ "${MODULE_TYPE}" == "opensource" ]; then
+                PKG_PREFIX="nvos"
+                BUILD_ARG="opensource"
+              else
+                PKG_PREFIX="nvidia"
+                BUILD_ARG=""
+              fi
 
-              # Set required environment variables (normally set by container entrypoint)
+              echo "=== Building ${PKG_PREFIX}-${DRIVER_VERSION} (${MODULE_TYPE}) for kernel ${KERNEL_VERSION} ==="
+
               export UNAME="${KERNEL_VERSION}"
               export CPU_COUNT="$(nproc)"
               export DATA_DIR="/tmp/nvidia-build"
@@ -70,14 +112,13 @@ jobs:
               make oldconfig </dev/null 2>&1 | tail -5
               make modules_prepare -j${CPU_COUNT} 2>&1 | tail -5
 
-              # Create symlink so nvidia-installer can find kernel sources
               mkdir -p "/lib/modules/${UNAME}"
               ln -sf "/usr/src/linux-${KERNEL_VERSION}" "/lib/modules/${UNAME}/build"
               ln -sf "/usr/src/linux-${KERNEL_VERSION}" "/lib/modules/${UNAME}/source"
               cd /
 
               # ---------------------------------------------------------------
-              # Step 2: Create makepkg shim (bzroot not extracted in CI)
+              # Step 2: Create makepkg shim
               # ---------------------------------------------------------------
               mkdir -p "${DATA_DIR}/bzroot-extracted-${UNAME}/sbin"
               printf "#!/bin/bash\n# Grab last argument as output file\nfor PKG; do true; done\ntar cJf \"\${PKG}\" . 2>/dev/null; exit 0\n" > "${DATA_DIR}/bzroot-extracted-${UNAME}/sbin/makepkg"
@@ -89,27 +130,20 @@ jobs:
               echo "=== Loading compile.sh and building ==="
               cd /workspace
 
-              # Wrap wget to suppress progress spam from compile.sh
               real_wget="$(which wget)"
               mkdir -p /usr/local/bin
               printf "#!/bin/bash\nexec ${real_wget} \"\${@/--show-progress/}\"" > /usr/local/bin/wget
               chmod +x /usr/local/bin/wget
 
-              # Source compile.sh to load the nvidia_driver() function.
-              # compile.sh lines 6-9 check $1 is not empty (exit 1 if missing).
-              # Lines 11-17 fetch versions.json and extract runtime versions.
-              # Lines 19-167 define nvidia_driver() but never call it.
-              source source/compile.sh "${DRIVER_VERSION}" "opensource"
-
-              # Call the build function
-              nvidia_driver "${DRIVER_VERSION}" "opensource"
+              source source/compile.sh "${DRIVER_VERSION}" ${BUILD_ARG:-"dummy"}
+              nvidia_driver "${DRIVER_VERSION}" ${BUILD_ARG}
 
               # ---------------------------------------------------------------
               # Step 4: Copy output artifacts
               # ---------------------------------------------------------------
               echo "=== Copying build artifacts ==="
-              find /tmp -name "nvos-*.txz" -exec cp {} /output/ \;
-              find /tmp -name "nvos-*.txz.md5" -exec cp {} /output/ \;
+              find /tmp -name "${PKG_PREFIX}-*.txz" -exec cp {} /output/ \;
+              find /tmp -name "${PKG_PREFIX}-*.txz.md5" -exec cp {} /output/ \;
 
               echo "=== Build artifacts ==="
               ls -la /output/
@@ -117,13 +151,11 @@ jobs:
 
       - name: Verify build output
         run: |
-          echo "=== Checking output ==="
           ls -la output/
-          if [ -z "$(ls output/nvos-*.txz 2>/dev/null)" ]; then
+          if [ -z "$(ls output/*.txz 2>/dev/null)" ]; then
             echo "ERROR: No .txz package found in output!"
             exit 1
           fi
-          echo "=== MD5 verification ==="
           cd output
           for f in *.txz; do
             if [ -f "${f}.md5" ]; then
@@ -141,7 +173,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: nvos-${{ inputs.driver_version }}-${{ inputs.kernel_version }}
+          name: ${{ matrix.module_type == 'opensource' && 'nvos' || 'nvidia' }}-${{ matrix.driver_version }}-${{ matrix.kernel_version }}
           path: output/*
           retention-days: 90
 
@@ -149,13 +181,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${{ inputs.kernel_version }}"
-          # Create release if it doesn't exist
+          TAG="${{ matrix.kernel_version }}"
           gh release view "${TAG}" --repo ${{ github.repository }} >/dev/null 2>&1 || \
             gh release create "${TAG}" --repo ${{ github.repository }} \
               --title "Drivers for kernel ${TAG}" \
               --notes "NVIDIA driver packages for Unraid kernel ${TAG}"
-          # Upload assets (overwrite if they exist)
           for f in output/*; do
             gh release upload "${TAG}" "${f}" --repo ${{ github.repository }} --clobber
           done
