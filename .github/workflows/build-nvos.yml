@@ -80,7 +80,7 @@ jobs:
               # Step 2: Create makepkg shim (bzroot not extracted in CI)
               # ---------------------------------------------------------------
               mkdir -p "${DATA_DIR}/bzroot-extracted-${UNAME}/sbin"
-              printf "#!/bin/bash\nwhile [[ \"\$1\" == -* ]]; do shift; done\nPKG=\"\$(realpath \"\$1\")\"\ntar cJf \"\${PKG}\" --exclude=\"\$(basename \"\${PKG}\")\" .\nexit 0\n" > "${DATA_DIR}/bzroot-extracted-${UNAME}/sbin/makepkg"
+              printf "#!/bin/bash\n# Grab last argument as output file\nfor PKG; do true; done\ntar cJf \"\${PKG}\" . 2>/dev/null; exit 0\n" > "${DATA_DIR}/bzroot-extracted-${UNAME}/sbin/makepkg"
               chmod +x "${DATA_DIR}/bzroot-extracted-${UNAME}/sbin/makepkg"
 
               # ---------------------------------------------------------------
