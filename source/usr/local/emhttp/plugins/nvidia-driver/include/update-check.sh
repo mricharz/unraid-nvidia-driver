@@ -6,7 +6,7 @@ if [ "${SET_DRV_V}" == "latest_nos" ]; then
 else
   export PACKAGE="nvidia"
 fi
-DL_URL="https://github.com/unraid/unraid-nvidia-driver/releases/download/${KERNEL_V}"
+DL_URL="https://github.com/mricharz/unraid-nvidia-driver/releases/download/${KERNEL_V}"
 INSTALLED_V="$(nvidia-smi | grep NVIDIA-SMI | cut -d ' ' -f3)"
 
 download() {
@@ -38,7 +38,7 @@ fi
 if [[ "${SET_DRV_V}" != "latest" && "${SET_DRV_V}" != "latest_prb" && "${SET_DRV_V}" != "latest_nfb" && "${SET_DRV_V}" != "latest_beta" ]]; then
   exit 0
 elif [ "${SET_DRV_V}" == "latest" ]; then
-  LAT_PACKAGE="$(wget -qO- https://api.github.com/repos/unraid/unraid-nvidia-driver/releases/tags/${KERNEL_V} | jq -r '.assets[].name' | grep "$PACKAGE" | grep -E -v '\.md5$' | sort -V | tail -1)"
+  LAT_PACKAGE="$(wget -qO- https://api.github.com/repos/mricharz/unraid-nvidia-driver/releases/tags/${KERNEL_V} | jq -r '.assets[].name' | grep "$PACKAGE" | grep -E -v '\.md5$' | sort -V | tail -1)"
   if [ -z ${LAT_PACKAGE} ]; then
     logger "Nvidia-Driver-Plugin: Automatic update check failed, can't get latest version number!"
     exit 1
@@ -46,8 +46,8 @@ elif [ "${SET_DRV_V}" == "latest" ]; then
     download
   fi
 elif [ "${SET_DRV_V}" == "latest_prb" ]; then
-  AVAIL_V="$(wget -qO- https://api.github.com/repos/unraid/unraid-nvidia-driver/releases/tags/${KERNEL_V} | jq -r '.assets[].name' | grep "$PACKAGE" | grep -E -v '\.md5$' | sort -V)"
-  PRB_V="$(wget -qO- https://raw.githubusercontent.com/unraid/unraid-nvidia-driver/master/versions.json | jq -r '.branches.production[]' | sort -V)"
+  AVAIL_V="$(wget -qO- https://api.github.com/repos/mricharz/unraid-nvidia-driver/releases/tags/${KERNEL_V} | jq -r '.assets[].name' | grep "$PACKAGE" | grep -E -v '\.md5$' | sort -V)"
+  PRB_V="$(wget -qO- https://raw.githubusercontent.com/mricharz/unraid-nvidia-driver/master/versions.json | jq -r '.branches.production[]' | sort -V)"
   LAT_PRB_V="$(comm -12 <(echo "$(echo "$AVAIL_V" | cut -d '-' -f2 | awk -F '.' '{printf "%d.%03d.%d\n", $1,$2,$3}' | awk -F '.' '{printf "%d.%03d.%02d\n", $1,$2,$3}')") <(echo "${PRB_V}" | awk -F '.' '{printf "%d.%03d.%d\n", $1,$2,$3}' | awk -F '.' '{printf "%d.%03d.%02d\n", $1,$2,$3}') | tail -1 | awk -F '.' '{printf "%d.%02d.%02d\n", $1,$2,$3}' | awk '{sub(/\.0+$/,"")}1')"
   LAT_PACKAGE="$(echo "${AVAIL_V}" | grep "\-${LAT_PRB_V}-")"
   if [ -z ${LAT_PACKAGE} ]; then
@@ -57,8 +57,8 @@ elif [ "${SET_DRV_V}" == "latest_prb" ]; then
     download
   fi
 elif [ "${SET_DRV_V}" == "latest_nfb" ]; then
-  AVAIL_V="$(wget -qO- https://api.github.com/repos/unraid/unraid-nvidia-driver/releases/tags/${KERNEL_V} | jq -r '.assets[].name' | grep "$PACKAGE" | grep -E -v '\.md5$' | sort -V)"
-  NFB_V="$(wget -qO- https://raw.githubusercontent.com/unraid/unraid-nvidia-driver/master/versions.json | jq -r '.branches.newfeature[]' | sort -V)"
+  AVAIL_V="$(wget -qO- https://api.github.com/repos/mricharz/unraid-nvidia-driver/releases/tags/${KERNEL_V} | jq -r '.assets[].name' | grep "$PACKAGE" | grep -E -v '\.md5$' | sort -V)"
+  NFB_V="$(wget -qO- https://raw.githubusercontent.com/mricharz/unraid-nvidia-driver/master/versions.json | jq -r '.branches.newfeature[]' | sort -V)"
   LAT_NFB_V="$(comm -12 <(echo "$(echo "$AVAIL_V" | cut -d '-' -f2 | awk -F '.' '{printf "%d.%03d.%d\n", $1,$2,$3}' | awk -F '.' '{printf "%d.%03d.%02d\n", $1,$2,$3}')") <(echo "${NFB_V}" | awk -F '.' '{printf "%d.%03d.%d\n", $1,$2,$3}' | awk -F '.' '{printf "%d.%03d.%02d\n", $1,$2,$3}') | tail -1 | awk -F '.' '{printf "%d.%02d.%02d\n", $1,$2,$3}' | awk '{sub(/\.0+$/,"")}1')"
   LAT_PACKAGE="$(echo "${AVAIL_V}" | grep "\-${LAT_NFB_V}-")"
   if [ -z ${LAT_PACKAGE} ]; then
@@ -68,8 +68,8 @@ elif [ "${SET_DRV_V}" == "latest_nfb" ]; then
     download
   fi
 elif [ "${SET_DRV_V}" == "latest_beta" ]; then
-  AVAIL_V="$(wget -qO- https://api.github.com/repos/unraid/unraid-nvidia-driver/releases/tags/${KERNEL_V} | jq -r '.assets[].name' | grep "$PACKAGE" | grep -E -v '\.md5$' | sort -V)"
-  BETA_V="$(wget -qO- https://raw.githubusercontent.com/unraid/unraid-nvidia-driver/master/versions.json | jq -r '.branches.beta.current')"
+  AVAIL_V="$(wget -qO- https://api.github.com/repos/mricharz/unraid-nvidia-driver/releases/tags/${KERNEL_V} | jq -r '.assets[].name' | grep "$PACKAGE" | grep -E -v '\.md5$' | sort -V)"
+  BETA_V="$(wget -qO- https://raw.githubusercontent.com/mricharz/unraid-nvidia-driver/master/versions.json | jq -r '.branches.beta.current')"
   LAT_BETA_V="$(comm -12 <(echo "$(echo "$AVAIL_V" | cut -d '-' -f2 | awk -F '.' '{printf "%d.%03d.%d\n", $1,$2,$3}' | awk -F '.' '{printf "%d.%03d.%02d\n", $1,$2,$3}')") <(echo "${BETA_V}" | awk -F '.' '{printf "%d.%03d.%d\n", $1,$2,$3}' | awk -F '.' '{printf "%d.%03d.%02d\n", $1,$2,$3}') | tail -1 | awk -F '.' '{printf "%d.%02d.%02d\n", $1,$2,$3}' | awk '{sub(/\.0+$/,"")}1')"
   LAT_PACKAGE="$(echo "${AVAIL_V}" | grep "\-${LAT_BETA_V}-")"
   if [ -z ${LAT_PACKAGE} ]; then
@@ -79,7 +79,7 @@ elif [ "${SET_DRV_V}" == "latest_beta" ]; then
     download
   fi
 elif [ "${SET_DRV_V}" == "latest_nos" ]; then
-  LAT_PACKAGE="$(wget -qO- https://api.github.com/repos/unraid/unraid-nvidia-driver/releases/tags/${KERNEL_V} | jq -r '.assets[].name' | grep -E -v '\.md5$' | grep "${PACKAGE}" | sort -V | tail -1)"
+  LAT_PACKAGE="$(wget -qO- https://api.github.com/repos/mricharz/unraid-nvidia-driver/releases/tags/${KERNEL_V} | jq -r '.assets[].name' | grep -E -v '\.md5$' | grep "${PACKAGE}" | sort -V | tail -1)"
   if [ -z ${LAT_PACKAGE} ]; then
     logger "Nvidia-Driver-Plugin: Automatic update check failed, can't get latest Open Source Driver version number!"
     exit 1

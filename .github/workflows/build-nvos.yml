@@ -144,3 +144,20 @@ jobs:
           name: nvos-${{ inputs.driver_version }}-${{ inputs.kernel_version }}
           path: output/*
           retention-days: 90
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ inputs.kernel_version }}"
+          # Create release if it doesn't exist
+          gh release view "${TAG}" --repo ${{ github.repository }} >/dev/null 2>&1 || \
+            gh release create "${TAG}" --repo ${{ github.repository }} \
+              --title "Drivers for kernel ${TAG}" \
+              --notes "NVIDIA driver packages for Unraid kernel ${TAG}"
+          # Upload assets (overwrite if they exist)
+          for f in output/*; do
+            gh release upload "${TAG}" "${f}" --repo ${{ github.repository }} --clobber
+          done
+          echo "=== Release ${TAG} updated ==="
+          gh release view "${TAG}" --repo ${{ github.repository }}

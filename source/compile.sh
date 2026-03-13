@@ -8,7 +8,7 @@ if [ -z "${1}" ]; then
   exit 1
 fi
 
-VERSIONS_JSON="$(wget -qO- https://raw.githubusercontent.com/unraid/unraid-nvidia-driver/refs/heads/master/versions.json)"
+VERSIONS_JSON="$(wget -qO- https://raw.githubusercontent.com/mricharz/unraid-nvidia-driver/refs/heads/master/versions.json)"
 if [ -z "${VERSIONS_JSON}" ]; then
   echo "ERROR: Can't get versions!"
   exit 1
