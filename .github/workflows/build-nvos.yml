@@ -61,14 +61,14 @@ jobs:
               echo "=== Downloading kernel sources ==="
               KERNEL_TAR="linux-${KERNEL_VERSION}.tar.xz"
               KERNEL_URL="https://github.com/ich777/unraid_kernel/releases/download/${KERNEL_VERSION}/${KERNEL_TAR}"
-              wget -q --show-progress -O "/tmp/${KERNEL_TAR}" "${KERNEL_URL}"
+              wget -q -O "/tmp/${KERNEL_TAR}" "${KERNEL_URL}"
               mkdir -p "/usr/src/linux-${KERNEL_VERSION}"
               tar xf "/tmp/${KERNEL_TAR}" -C "/usr/src/linux-${KERNEL_VERSION}"
               cd "/usr/src/linux-${KERNEL_VERSION}"
 
               echo "=== Preparing kernel headers ==="
-              make oldconfig </dev/null
-              make modules_prepare -j${CPU_COUNT}
+              make oldconfig </dev/null 2>&1 | tail -5
+              make modules_prepare -j${CPU_COUNT} 2>&1 | tail -5
 
               # Create symlink so nvidia-installer can find kernel sources
               mkdir -p "/lib/modules/${UNAME}"
@@ -88,6 +88,12 @@ jobs:
               # ---------------------------------------------------------------
               echo "=== Loading compile.sh and building ==="
               cd /workspace
+
+              # Wrap wget to suppress progress spam from compile.sh
+              real_wget="$(which wget)"
+              mkdir -p /usr/local/bin
+              printf "#!/bin/bash\nexec ${real_wget} \"\${@/--show-progress/}\"" > /usr/local/bin/wget
+              chmod +x /usr/local/bin/wget
 
               # Source compile.sh to load the nvidia_driver() function.
               # compile.sh lines 6-9 check $1 is not empty (exit 1 if missing).
