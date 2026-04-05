@@ -162,7 +162,10 @@ details.nv-branch dd {
 }
 
 .nv-gpu-details { margin: 4px 0; }
-.nv-gpu-details summary { cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.nv-gpu-details summary { cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 4px 0; list-style: none; }
+.nv-gpu-details summary::-webkit-details-marker { display: none; }
+.nv-gpu-chevron { font-size: 0.8em; transition: transform 0.2s; color: var(--alt-text-color, #888); }
+.nv-gpu-details[open] .nv-gpu-chevron { transform: rotate(90deg); }
 .nv-gpu-details[open] summary { margin-bottom: 8px; }
 .nv-gpu-info {
   padding: 10px 14px;
@@ -269,6 +272,7 @@ $(function() { filterVersions(); });
         ?>
         <details class="nv-gpu-details">
           <summary>
+            <i class="fa fa-chevron-right nv-gpu-chevron"></i>
             <span class="nv-val"><?php echo htmlspecialchars($gpu['gpu_name'] ?? 'Unknown GPU'); ?></span>
             <span class="nv-gpu-tag <?php echo $tag_class; ?>"><?php echo $tag_text; ?></span>
           </summary>
