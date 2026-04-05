@@ -67,7 +67,7 @@ jobs:
             exit 0
           fi
 
-          KERNEL_JSON=$(echo "$KERNEL_TAGS" | jq -R -s 'split("\n") | map(select(length > 0))')
+          KERNEL_JSON=$(echo "$KERNEL_TAGS" | jq -R -c -s 'split("\n") | map(select(length > 0))')
           echo "kernels=${KERNEL_JSON}" >> "$GITHUB_OUTPUT"
           echo "Detected kernels: ${KERNEL_JSON}"
 
