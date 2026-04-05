@@ -59,15 +59,39 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Check if package already exists
+        id: check-existing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ matrix.module_type }}" == "opensource" ]; then
+            PKG_PREFIX="nvos"
+          else
+            PKG_PREFIX="nvidia"
+          fi
+          PKG_NAME="${PKG_PREFIX}-${{ matrix.driver_version }}-${{ matrix.kernel_version }}-1.txz"
+          TAG="${{ matrix.kernel_version }}"
+
+          if gh release view "${TAG}" --repo ${{ github.repository }} --json assets --jq ".assets[].name" 2>/dev/null | grep -qx "${PKG_NAME}"; then
+            echo "Package ${PKG_NAME} already exists in release ${TAG}, skipping build"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Package ${PKG_NAME} not found, proceeding with build"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Free up disk space
+        if: steps.check-existing.outputs.skip != 'true'
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
           df -h /
 
       - name: Create output directory
+        if: steps.check-existing.outputs.skip != 'true'
         run: mkdir -p output
 
       - name: Build package in container
+        if: steps.check-existing.outputs.skip != 'true'
         run: |
           docker pull ghcr.io/ich777/unraid_kernel:${{ needs.prepare.outputs.gcc_tag }}
           docker run --rm \
@@ -152,6 +176,7 @@ jobs:
             '
 
       - name: Verify build output
+        if: steps.check-existing.outputs.skip != 'true'
         run: |
           ls -la output/
           if [ -z "$(ls output/*.txz 2>/dev/null)" ]; then
@@ -173,6 +198,7 @@ jobs:
           done
 
       - name: Upload artifact
+        if: steps.check-existing.outputs.skip != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.module_type == 'opensource' && 'nvos' || 'nvidia' }}-${{ matrix.driver_version }}-${{ matrix.kernel_version }}
@@ -180,6 +206,7 @@ jobs:
           retention-days: 90
 
       - name: Create or update GitHub Release
+        if: steps.check-existing.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
