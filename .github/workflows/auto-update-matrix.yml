@@ -196,17 +196,28 @@ jobs:
           ' versions.json > versions.json.tmp && mv versions.json.tmp versions.json
 
       - name: Commit and push if changed
+        id: commit
         run: |
           if git diff --quiet; then
             echo "No changes detected"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
           git add build-matrix.json versions.json
-          git diff --cached --quiet && { echo "No staged changes"; exit 0; }
+          git diff --cached --quiet && { echo "No staged changes"; echo "changed=false" >> "$GITHUB_OUTPUT"; exit 0; }
           git commit -m "auto-update: detect new driver/kernel versions"
           git push
+          echo "changed=true" >> "$GITHUB_OUTPUT"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Trigger build workflow
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Changes committed, triggering build workflow..."
+          gh workflow run "Build NVIDIA Driver Packages" --repo ${{ github.repository }} --ref master

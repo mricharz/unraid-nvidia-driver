@@ -2,9 +2,6 @@ name: Build NVIDIA Driver Packages
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - 'build-matrix.json'
 
 jobs:
   prepare:
