@@ -95,12 +95,28 @@ jobs:
           echo "libnvidia=${LIBNVIDIA}" >> "$GITHUB_OUTPUT"
           echo "Detected: toolkit=${CONTAINER_TOOLKIT} libnvidia=${LIBNVIDIA}"
 
+      - name: Detect latest GCC tag
+        id: gcc
+        run: |
+          TOKEN=$(curl -s "https://ghcr.io/token?scope=repository:ich777/unraid_kernel:pull" | jq -r '.token')
+          GCC_TAG=$(curl -s -H "Authorization: Bearer $TOKEN" "https://ghcr.io/v2/ich777/unraid_kernel/tags/list" \
+            | jq -r '.tags[]' | grep '^gcc_' | sort -V | tail -1)
+
+          if [ -z "${GCC_TAG}" ]; then
+            echo "::warning::Could not detect GCC tag, keeping current"
+            GCC_TAG=$(jq -r '.gcc_tag' build-matrix.json)
+          fi
+
+          echo "gcc_tag=${GCC_TAG}" >> "$GITHUB_OUTPUT"
+          echo "Detected GCC tag: ${GCC_TAG}"
+
       - name: Update build-matrix.json
         env:
           NEW_PRB: ${{ steps.nvidia.outputs.prb }}
           NEW_NFB: ${{ steps.nvidia.outputs.nfb }}
           NEW_BETA: ${{ steps.nvidia.outputs.beta }}
           NEW_KERNELS: ${{ steps.kernels.outputs.kernels }}
+          NEW_GCC: ${{ steps.gcc.outputs.gcc_tag }}
         run: |
           CUR_PRB=$(jq -r '.branches.production.driver_version' build-matrix.json)
           CUR_NFB=$(jq -r '.branches.newfeature.driver_version' build-matrix.json)
@@ -109,13 +125,17 @@ jobs:
           jq --arg new_prb "${NEW_PRB}" \
              --arg new_nfb "${NEW_NFB}" \
              --arg new_beta "${NEW_BETA}" \
+             --arg new_gcc "${NEW_GCC}" \
              --arg cur_prb "${CUR_PRB}" \
              --arg cur_nfb "${CUR_NFB}" \
              --arg cur_beta "${CUR_BETA}" \
              --argjson new_kernels "${NEW_KERNELS:-null}" \
           '
+            # Update gcc_tag
+            (if ($new_gcc != "") then .gcc_tag = $new_gcc else . end)
+
             # Update kernel versions if detected
-            (if $new_kernels != null and ($new_kernels | length > 0) then
+            | (if $new_kernels != null and ($new_kernels | length > 0) then
               .kernel_versions = $new_kernels
             else . end)
 
