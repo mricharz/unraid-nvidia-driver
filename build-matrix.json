@@ -1,7 +1,7 @@
 {
   "gcc_tag": "gcc_14.2.0",
   "kernel_versions": [
-    "6.18.23-Unraid",
+    "6.18.24-Unraid",
     "6.17.10-Unraid",
     "6.12.82-Unraid"
   ],
