@@ -3,7 +3,7 @@
   "kernel_versions": [
     "6.18.26-Unraid",
     "6.17.10-Unraid",
-    "6.12.85-Unraid"
+    "6.12.87-Unraid"
   ],
   "branches": {
     "production": {
