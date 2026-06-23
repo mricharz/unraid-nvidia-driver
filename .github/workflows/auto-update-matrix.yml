@@ -153,29 +153,20 @@ jobs:
               .kernel_versions = $new_kernels
             else . end)
 
-            # Rotate production: old version → extra_builds, set new version
-            | (if ($new_prb != "") and ($cur_prb != "") and ($cur_prb != "null") and ($cur_prb != $new_prb) then
-                (if (.extra_builds | map(.driver_version) | index($cur_prb) | not) then
-                  .extra_builds += [{"driver_version": $cur_prb, "module_types": ["proprietary", "opensource"]}]
+            # Rotate each branch: old version → extra_builds (if a new one came
+            # in), then set the new version. One reduce over the branch list keeps
+            # the tracks in sync instead of three copy-pasted blocks.
+            | reduce (
+                [["production", $new_prb,  $cur_prb],
+                 ["newfeature", $new_nfb,  $cur_nfb],
+                 ["beta",       $new_beta, $cur_beta]][]
+              ) as [$br, $new, $cur] (.;
+                if ($new != "") and ($cur != "") and ($cur != "null") and ($cur != $new) then
+                  (if (.extra_builds | map(.driver_version) | index($cur) | not) then
+                    .extra_builds += [{"driver_version": $cur, "module_types": ["proprietary", "opensource"]}]
+                  else . end)
+                  | .branches[$br].driver_version = $new
                 else . end)
-                | .branches.production.driver_version = $new_prb
-              else . end)
-
-            # Rotate newfeature: old version → extra_builds, set new version
-            | (if ($new_nfb != "") and ($cur_nfb != "") and ($cur_nfb != "null") and ($cur_nfb != $new_nfb) then
-                (if (.extra_builds | map(.driver_version) | index($cur_nfb) | not) then
-                  .extra_builds += [{"driver_version": $cur_nfb, "module_types": ["proprietary", "opensource"]}]
-                else . end)
-                | .branches.newfeature.driver_version = $new_nfb
-              else . end)
-
-            # Rotate beta: old version → extra_builds, set new version
-            | (if ($new_beta != "") and ($cur_beta != "") and ($cur_beta != "null") and ($cur_beta != $new_beta) then
-                (if (.extra_builds | map(.driver_version) | index($cur_beta) | not) then
-                  .extra_builds += [{"driver_version": $cur_beta, "module_types": ["proprietary", "opensource"]}]
-                else . end)
-                | .branches.beta.driver_version = $new_beta
-              else . end)
 
             # Remove from extra_builds any version that is now a branch version
             | . as $root | .extra_builds = [
