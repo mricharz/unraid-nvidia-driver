@@ -1,20 +1,20 @@
 {
   "gcc_tag": "gcc_14.2.0",
   "kernel_versions": [
-    "6.18.38-Unraid",
+    "6.18.41-Unraid",
     "6.17.10-Unraid",
     "6.12.98-Unraid"
   ],
   "branches": {
     "production": {
-      "driver_version": "595.84",
+      "driver_version": "595.91.07",
       "module_types": [
         "proprietary",
         "opensource"
       ]
     },
     "newfeature": {
-      "driver_version": "610.43.03",
+      "driver_version": "610.57.04",
       "module_types": [
         "proprietary",
         "opensource"
@@ -86,7 +86,21 @@
       ]
     },
     {
+      "driver_version": "595.84",
+      "module_types": [
+        "proprietary",
+        "opensource"
+      ]
+    },
+    {
       "driver_version": "610.43.02",
+      "module_types": [
+        "proprietary",
+        "opensource"
+      ]
+    },
+    {
+      "driver_version": "610.43.03",
       "module_types": [
         "proprietary",
         "opensource"
