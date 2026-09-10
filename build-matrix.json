@@ -14,7 +14,7 @@
       ]
     },
     "newfeature": {
-      "driver_version": "610.57.04",
+      "driver_version": "615.71.09",
       "module_types": [
         "proprietary",
         "opensource"
@@ -108,6 +108,13 @@
     },
     {
       "driver_version": "610.43.03",
+      "module_types": [
+        "proprietary",
+        "opensource"
+      ]
+    },
+    {
+      "driver_version": "610.57.04",
       "module_types": [
         "proprietary",
         "opensource"
