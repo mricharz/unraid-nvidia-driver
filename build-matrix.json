@@ -7,7 +7,7 @@
   ],
   "branches": {
     "production": {
-      "driver_version": "595.104.02",
+      "driver_version": "595.112.07",
       "module_types": [
         "proprietary",
         "opensource"
@@ -59,6 +59,13 @@
     },
     {
       "driver_version": "590.48.01",
+      "module_types": [
+        "proprietary",
+        "opensource"
+      ]
+    },
+    {
+      "driver_version": "595.104.02",
       "module_types": [
         "proprietary",
         "opensource"
